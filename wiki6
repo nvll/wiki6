@@ -17,16 +17,19 @@ end_entry = sys.argv[2]
 # here
 BLACKLIST = ['Main_Page', 'Wikiquote']
 
-# Base url for the wiki source being used
+# Base url for the wiki source being used and the format for the links.
+# Modify these and you can use pretty much any wiki
 BASE_URL = "http://en.wikipedia.org/wiki/"
-
 wikilink = re.compile(".*<a href=\"/wiki/([a-zA-Z0-9_()]*)\" title=\".*\">.*")
-mainlink = re.compile(".*\<li id=\".*\">.*</li\>")
+
+# The initial parent used for nodes
 parent = start_entry
 callbackList = []
 urls = []
+urls.append(start_entry)
 new_urls = []
 visited = {}
+visited[start_entry] = ''
 depth = 0
 
 # Callback for curl data because pycurl isn't as cool as libcurl and doesn't
@@ -40,7 +43,6 @@ class callbackContainer:
             else:
                 buf = ''
             match = wikilink.match(buf)
-            nonwiki = mainlink.match(buf)
             
             if match:
                 new_url = match.group(1)
@@ -76,25 +78,26 @@ def startDownloads(urls):
             if ret != pycurl.E_CALL_MULTI_PERFORM:
                 break
 
-urls.append(start_entry)
-visited[start_entry] = ''
 while end_entry not in visited and depth < 6:
     startDownloads(urls)
     urls = new_urls
     new_urls = []
     depth += 1
-path = []
+
 if end_entry in visited:
+    path = []
     entry = end_entry
     path.append(entry)
     while entry != start_entry:
         entry = visited[entry]
         path.append(entry)
-sys.stdout.write("Path found: ")
-while path:
-    node = path.pop()
-    sys.stdout.write(node)
-    if (path):
-        sys.stdout.write(" > ")
-print '\n'
+    sys.stdout.write("Path found: ")
+    while path:
+        node = path.pop()
+        sys.stdout.write(node)
+        if (path):
+            sys.stdout.write(" > ")
+    print '\n'
+else:
+    print "Couldn't find a path within 6 degrees :(\n"
 
