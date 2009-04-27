@@ -1,0 +1,108 @@
+#!/usr/bin/python
+
+import pycurl
+import re
+import sys
+import pprint
+
+# Make the body/footer use a substring search rather than regex
+#body = re.compile(r".*<div id=\"bodyContent\">.*")
+#footer = re.compile(r".*<div class=\"printfooter\">.*")
+pp = pprint.PrettyPrinter(depth=6)
+
+buf = ''
+if len (sys.argv) < 3:
+    print "Usage: ", sys.argv[0], " <wiki start entry> <wiki end entry>"
+    sys.exit()
+
+start_entry = sys.argv[1]
+end_entry = sys.argv[2]
+
+# Depending on the wiki used there may be main pages using normal wiki links
+# that link to other wiki entries that are mostly irrelevant. Blacklist them
+# here
+BLACKLIST = ['Main_Page', 'Wikiquote']
+
+# Base url for the wiki source being used
+BASE_URL = "http://en.wikipedia.org/wiki/"
+
+wikilink = re.compile(".*<a href=\"/wiki/([a-zA-Z0-9_()]*)\" title=\".*\">.*")
+mainlink = re.compile(".*\<li id=\".*\">.*</li\>")
+parent = start_entry
+callbackList = []
+urls = []
+new_urls = []
+visited = {}
+depth = 0
+
+# Callback for curl data because pycurl isn't as cool as libcurl and doesn't
+# let me pass pointers to the callback
+class callbackContainer:
+    def parse_entry(self, body):
+        global buf, urls, new_urls, visited
+        # Build lines from the bodies passed
+        for char in body:
+            if char != '\n':
+                buf += char
+            else:
+                buf = ''
+            #print "Line: ", buf
+            match = wikilink.match(buf)
+            nonwiki = mainlink.match(buf)
+            # If a url is found
+            if match:
+                new_url = match.group(1)
+                if new_url not in visited and new_url not in BLACKLIST:
+#                    print self.parent, "> ", depth, " > ", new_url
+                    new_urls.append(new_url)
+                    visited[new_url] = self.parent
+                buf = ''
+
+def startDownloads(urls):
+    global BASE_URL, depth
+    cMulti = pycurl.CurlMulti()
+    print len(urls), "url(s) in depth", depth
+    for url in urls:
+        callback = callbackContainer()
+        callback.parent = url
+        child = pycurl.Curl()
+        child.setopt(pycurl.URL, ''.join([BASE_URL, url]))
+        child.setopt(pycurl.WRITEFUNCTION, callback.parse_entry)
+        cMulti.add_handle(child)
+        # Ensure a reference exists despite pycurl's best efforts
+        callbackList.append(child)
+
+    while True:
+        ret, handles = cMulti.perform()
+        if ret != pycurl.E_CALL_MULTI_PERFORM:
+            break
+    while handles:
+        ret = cMulti.select(1.0)
+        if ret == -1: continue
+        while True:
+            ret, handles = cMulti.perform()
+            if ret != pycurl.E_CALL_MULTI_PERFORM:
+                break
+
+urls.append(start_entry)
+visited[start_entry] = ''
+while end_entry not in visited and depth < 6:
+    startDownloads(urls)
+    urls = new_urls
+    new_urls = []
+    depth += 1
+path = []
+if end_entry in visited:
+    entry = end_entry
+    path.append(entry)
+    while entry != start_entry:
+        entry = visited[entry]
+        path.append(entry)
+sys.stdout.write("Path found: ")
+while path:
+    node = path.pop()
+    sys.stdout.write(node)
+    if (path):
+        sys.stdout.write(" > ")
+print '\n'
+
