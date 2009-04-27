@@ -3,12 +3,6 @@
 import pycurl
 import re
 import sys
-import pprint
-
-# Make the body/footer use a substring search rather than regex
-#body = re.compile(r".*<div id=\"bodyContent\">.*")
-#footer = re.compile(r".*<div class=\"printfooter\">.*")
-pp = pprint.PrettyPrinter(depth=6)
 
 buf = ''
 if len (sys.argv) < 3:
@@ -40,16 +34,14 @@ depth = 0
 class callbackContainer:
     def parse_entry(self, body):
         global buf, urls, new_urls, visited
-        # Build lines from the bodies passed
         for char in body:
             if char != '\n':
                 buf += char
             else:
                 buf = ''
-            #print "Line: ", buf
             match = wikilink.match(buf)
             nonwiki = mainlink.match(buf)
-            # If a url is found
+            
             if match:
                 new_url = match.group(1)
                 if new_url not in visited and new_url not in BLACKLIST:
